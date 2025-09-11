@@ -1,20 +1,16 @@
-import os
 import logging
 from aiogram import Bot, Dispatcher, executor, types
 from aiogram.types import ReplyKeyboardMarkup
 
-# Настройки: токен и ID берём из переменных окружения
+# Настройки
 API_TOKEN = os.getenv("API_TOKEN")
 ADMIN_ID = int(os.getenv("ADMIN_ID"))
 
-# Логирование
 logging.basicConfig(level=logging.INFO)
 
-# Бот и диспетчер
 bot = Bot(token=API_TOKEN)
 dp = Dispatcher(bot)
 
-# Словарь для хранения данных пользователя
 user_data = {}
 
 # Клавиатуры
@@ -41,8 +37,8 @@ project_effect_kb = ReplyKeyboardMarkup(resize_keyboard=True).add(
 send_kb = ReplyKeyboardMarkup(resize_keyboard=True).add("Отправить данные оператору")
 
 
-# Универсальный старт: реагируем на любое сообщение, если нет активной оценки
-@dp.message_handler(lambda msg: "team_name" not in user_data.get(msg.from_user.id, {}))
+# Приветствие: если нет команды и сообщение не "Старт"
+@dp.message_handler(lambda msg: "team_name" not in user_data.get(msg.from_user.id, {}) and msg.text != "Старт")
 async def always_offer_start(message: types.Message):
     user_data[message.from_user.id] = {}
     await message.answer(
@@ -75,7 +71,7 @@ async def own_team(message: types.Message):
     await message.answer("Присутствует новая информация?", reply_markup=yes_no_kb)
 
 
-# Новая информация (фикс для «Нет»)
+# Новая информация
 @dp.message_handler(lambda msg: "is_new_info" not in user_data.get(msg.from_user.id, {}))
 async def new_info(message: types.Message):
     if message.text not in ["Да", "Нет"]:
@@ -150,7 +146,7 @@ async def project_effect(message: types.Message):
     await message.answer("Спасибо 🙏", reply_markup=send_kb)
 
 
-# Отправка данных админу
+# Отправка админу
 @dp.message_handler(lambda msg: msg.text == "Отправить данные оператору")
 async def send_to_admin(message: types.Message):
     data = user_data.get(message.from_user.id, {})
@@ -175,15 +171,15 @@ async def send_to_admin(message: types.Message):
         await message.answer(f"Не удалось отправить админу: {e}")
 
 
-# Начать оценку новой команды
+# Новая команда
 @dp.message_handler(lambda msg: msg.text == "Перейти к оценке другой команды")
 async def new_team(message: types.Message):
-    user_data[message.from_user.id] = {}  # сбрасываем старые данные
+    user_data[message.from_user.id] = {}
     await message.answer("Введи название новой команды, которую хочешь оценить.",
                          reply_markup=types.ReplyKeyboardRemove())
 
 
-# Тестовая команда
+# /ping
 @dp.message_handler(commands=["ping"])
 async def ping(message: types.Message):
     try:
