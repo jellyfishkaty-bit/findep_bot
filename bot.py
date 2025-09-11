@@ -2,6 +2,9 @@ import os
 import logging
 from aiogram import Bot, Dispatcher, executor, types
 from aiogram.types import ReplyKeyboardMarkup
+from aiogram.contrib.fsm_storage.memory import MemoryStorage
+from aiogram.dispatcher import FSMContext
+from aiogram.dispatcher.filters.state import State, StatesGroup
 
 API_TOKEN = os.getenv("API_TOKEN")
 ADMIN_ID = int(os.getenv("ADMIN_ID"))
@@ -9,10 +12,20 @@ ADMIN_ID = int(os.getenv("ADMIN_ID"))
 logging.basicConfig(level=logging.INFO)
 
 bot = Bot(token=API_TOKEN)
-dp = Dispatcher(bot)
+storage = MemoryStorage()
+dp = Dispatcher(bot, storage=storage)
 
-# Сохраняем данные пользователей
-user_data = {}
+# Состояния
+class EvalForm(StatesGroup):
+    team_name = State()
+    is_own_team = State()
+    is_new_info = State()
+    info_quality = State()
+    method_validity = State()
+    assumptions_quality = State()
+    result_reliability = State()
+    result_type = State()
+    project_effect = State()
 
 # Клавиатуры
 yes_no_kb = ReplyKeyboardMarkup(resize_keyboard=True).add("Да", "Нет")
@@ -35,117 +48,107 @@ project_effect_kb = ReplyKeyboardMarkup(resize_keyboard=True).add(
     "Разовый", "Постоянный"
 )
 send_kb = ReplyKeyboardMarkup(resize_keyboard=True).add("Отправить данные оператору")
-next_team_kb = ReplyKeyboardMarkup(resize_keyboard=True).add("Оценить другую команду")
+restart_kb = ReplyKeyboardMarkup(resize_keyboard=True).add("Перейти к оценке другой команды")
 
-
-# --- стартовый шаг ---
+# Старт
 @dp.message_handler(commands=["start"])
 async def start(message: types.Message):
-    user_data[message.from_user.id] = {}
+    await EvalForm.team_name.set()
     await message.answer("Привет 👋\nВведи название команды, которую хочешь оценить.")
 
-
-# --- ввод названия команды ---
-@dp.message_handler(lambda msg: "team_name" not in user_data.get(msg.from_user.id, {}))
-async def get_team_name(message: types.Message):
-    user_data[message.from_user.id]["team_name"] = message.text
+# Название команды
+@dp.message_handler(state=EvalForm.team_name)
+async def get_team_name(message: types.Message, state: FSMContext):
+    await state.update_data(team_name=message.text)
+    await EvalForm.is_own_team.set()
     await message.answer("Капитан говорит о своей команде?", reply_markup=yes_no_kb)
 
-
-# --- говорит ли о своей команде ---
-@dp.message_handler(lambda msg: "is_own_team" not in user_data.get(msg.from_user.id, {}))
-async def own_team(message: types.Message):
+# Своя команда или нет
+@dp.message_handler(state=EvalForm.is_own_team)
+async def own_team(message: types.Message, state: FSMContext):
     if message.text not in ["Да", "Нет"]:
         return
-    user_data[message.from_user.id]["is_own_team"] = message.text
+    await state.update_data(is_own_team=message.text)
+    await EvalForm.is_new_info.set()
     await message.answer("Присутствует новая информация?", reply_markup=yes_no_kb)
 
-
-# --- новая информация ---
-@dp.message_handler(lambda msg: "is_new_info" not in user_data.get(msg.from_user.id, {}))
-async def new_info(message: types.Message):
+# Новая информация
+@dp.message_handler(state=EvalForm.is_new_info)
+async def new_info(message: types.Message, state: FSMContext):
     if message.text not in ["Да", "Нет"]:
         return
-    user_data[message.from_user.id]["is_new_info"] = message.text
+    await state.update_data(is_new_info=message.text)
     if message.text == "Нет":
-        # заглушки для остальных шагов
-        user_data[message.from_user.id].update({
-            "info_quality": "—",
-            "method_validity": "—",
-            "assumptions_quality": "—",
-            "result_reliability": "—",
-            "result_type": "—",
-            "project_effect": "—",
-        })
         await message.answer("Спасибо 🙏", reply_markup=send_kb)
+        await state.set_state("finish")  # специальное состояние ожидания отправки
     else:
+        await EvalForm.info_quality.set()
         await message.answer("Оцените достоверность и аргументированность информации",
                              reply_markup=info_quality_kb)
 
-
-# --- качество информации ---
-@dp.message_handler(lambda msg: "info_quality" not in user_data.get(msg.from_user.id, {}))
-async def info_quality(message: types.Message):
+# Достоверность
+@dp.message_handler(state=EvalForm.info_quality)
+async def info_quality(message: types.Message, state: FSMContext):
     if message.text not in ["Хорошая", "Средняя", "Слабая", "Не можем оценить"]:
         return
-    user_data[message.from_user.id]["info_quality"] = message.text
+    await state.update_data(info_quality=message.text)
+    await EvalForm.method_validity.set()
     await message.answer("Является ли методика расчёта результата корректной?",
                          reply_markup=method_validity_kb)
 
-
-# --- корректность методики ---
-@dp.message_handler(lambda msg: "method_validity" not in user_data.get(msg.from_user.id, {}))
-async def method_validity(message: types.Message):
+# Методика
+@dp.message_handler(state=EvalForm.method_validity)
+async def method_validity(message: types.Message, state: FSMContext):
     if message.text not in ["Некорректно", "Есть ошибки", "Корректная"]:
         return
-    user_data[message.from_user.id]["method_validity"] = message.text
+    await state.update_data(method_validity=message.text)
+    await EvalForm.assumptions_quality.set()
     await message.answer("Оцените обоснованность предпосылок расчёта",
                          reply_markup=assumptions_kb)
 
-
-# --- предпосылки ---
-@dp.message_handler(lambda msg: "assumptions_quality" not in user_data.get(msg.from_user.id, {}))
-async def assumptions_quality(message: types.Message):
+# Предпосылки
+@dp.message_handler(state=EvalForm.assumptions_quality)
+async def assumptions_quality(message: types.Message, state: FSMContext):
     if message.text not in ["Оптимистичны", "Реалистичны", "Нереалистичны", "Невозможно оценить"]:
         return
-    user_data[message.from_user.id]["assumptions_quality"] = message.text
+    await state.update_data(assumptions_quality=message.text)
+    await EvalForm.result_reliability.set()
     await message.answer("Верите ли в реалистичность расчёта результата?",
                          reply_markup=result_reliability_kb)
 
-
-# --- реалистичность результата ---
-@dp.message_handler(lambda msg: "result_reliability" not in user_data.get(msg.from_user.id, {}))
-async def result_reliability(message: types.Message):
+# Реалистичность результата
+@dp.message_handler(state=EvalForm.result_reliability)
+async def result_reliability(message: types.Message, state: FSMContext):
     if message.text not in ["Верим", "Не верим", "Сомневаемся", "Не можем оценить"]:
         return
-    user_data[message.from_user.id]["result_reliability"] = message.text
+    await state.update_data(result_reliability=message.text)
+    await EvalForm.result_type.set()
     await message.answer("Оцените тип оценки экономического результата",
                          reply_markup=result_type_kb)
 
-
-# --- тип результата ---
-@dp.message_handler(lambda msg: "result_type" not in user_data.get(msg.from_user.id, {}))
-async def result_type(message: types.Message):
+# Тип результата
+@dp.message_handler(state=EvalForm.result_type)
+async def result_type(message: types.Message, state: FSMContext):
     if message.text not in ["Реализован", "Спрогнозирован"]:
         return
-    user_data[message.from_user.id]["result_type"] = message.text
+    await state.update_data(result_type=message.text)
+    await EvalForm.project_effect.set()
     await message.answer("Какой эффект от проекта?",
                          reply_markup=project_effect_kb)
 
-
-# --- эффект проекта ---
-@dp.message_handler(lambda msg: "project_effect" not in user_data.get(msg.from_user.id, {}))
-async def project_effect(message: types.Message):
+# Эффект проекта
+@dp.message_handler(state=EvalForm.project_effect)
+async def project_effect(message: types.Message, state: FSMContext):
     if message.text not in ["Разовый", "Постоянный"]:
         return
-    user_data[message.from_user.id]["project_effect"] = message.text
+    await state.update_data(project_effect=message.text)
     await message.answer("Спасибо 🙏", reply_markup=send_kb)
+    await state.set_state("finish")
 
-
-# --- отправка админу ---
-@dp.message_handler(lambda msg: msg.text == "Отправить данные оператору")
-async def send_to_admin(message: types.Message):
-    data = user_data.get(message.from_user.id, {})
+# Отправка данных оператору
+@dp.message_handler(lambda msg: msg.text == "Отправить данные оператору", state="finish")
+async def send_to_admin(message: types.Message, state: FSMContext):
+    data = await state.get_data()
     report = (
         f"Команда: {data.get('team_name')}\n"
         f"О своей команде: {data.get('is_own_team')}\n"
@@ -158,15 +161,14 @@ async def send_to_admin(message: types.Message):
         f"Эффект: {data.get('project_effect')}"
     )
     await bot.send_message(ADMIN_ID, report)
-    await message.answer("Данные отправлены оператору ✅", reply_markup=next_team_kb)
+    await message.answer("Данные отправлены оператору ✅", reply_markup=restart_kb)
+    await state.finish()
 
-
-# --- новая команда ---
-@dp.message_handler(lambda msg: msg.text == "Оценить другую команду")
+# Начать заново
+@dp.message_handler(lambda msg: msg.text == "Перейти к оценке другой команды")
 async def restart(message: types.Message):
-    user_data[message.from_user.id] = {}
-    await message.answer("Введи название новой команды для оценки:")
-
+    await EvalForm.team_name.set()
+    await message.answer("Введи название команды, которую хочешь оценить.")
 
 if __name__ == "__main__":
     executor.start_polling(dp, skip_updates=True)
