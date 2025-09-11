@@ -139,6 +139,14 @@ async def send_to_admin(message: types.Message):
     await bot.send_message(ADMIN_ID, report)
     await message.answer("Данные отправлены оператору ✅", reply_markup=types.ReplyKeyboardRemove())
 
+@dp.message_handler(commands=['ping'])
+async def ping(message: types.Message):
+    try:
+        await bot.send_message(ADMIN_ID, f"Тест: бот может писать админу. От {message.from_user.id}")
+        await message.answer("Пробный сигнал отправлен админу ✅")
+    except Exception as e:
+        await message.answer(f"Не удалось отправить админу: {e}")
 
 if __name__ == "__main__":
     executor.start_polling(dp, skip_updates=True)
+
