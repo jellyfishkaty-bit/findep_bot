@@ -41,10 +41,14 @@ project_effect_kb = ReplyKeyboardMarkup(resize_keyboard=True).add(
 send_kb = ReplyKeyboardMarkup(resize_keyboard=True).add("Отправить данные оператору")
 
 
-# Первый контакт
-@dp.message_handler(commands=["start"])
-async def start(message: types.Message):
-    await message.answer("Привет 👋 Нажми кнопку «Старт», чтобы начать оценку.", reply_markup=start_kb)
+# Первый контакт — всегда показываем кнопку «Старт»
+@dp.message_handler(lambda msg: msg.from_user.id not in user_data)
+async def greet_user(message: types.Message):
+    user_data[message.from_user.id] = {}
+    await message.answer(
+        "Привет 👋 Нажми кнопку «Старт», чтобы начать оценку.",
+        reply_markup=start_kb
+    )
 
 
 # Нажатие кнопки Старт
@@ -148,21 +152,31 @@ async def project_effect(message: types.Message):
 async def send_to_admin(message: types.Message):
     data = user_data.get(message.from_user.id, {})
     report = (
-        f"Команда: {data.get('team_name')}\n"
-        f"О своей команде: {data.get('is_own_team')}\n"
-        f"Новая информация: {data.get('is_new_info')}\n"
-        f"Аргументированность: {data.get('info_quality')}\n"
-        f"Методика: {data.get('method_validity')}\n"
-        f"Предпосылки: {data.get('assumptions_quality')}\n"
-        f"Реалистичность результата: {data.get('result_reliability')}\n"
-        f"Тип результата: {data.get('result_type')}\n"
-        f"Эффект: {data.get('project_effect')}"
+        f"Команда: {data.get('team_name', '—')}\n"
+        f"О своей команде: {data.get('is_own_team', '—')}\n"
+        f"Новая информация: {data.get('is_new_info', '—')}\n"
+        f"Аргументированность: {data.get('info_quality', '—')}\n"
+        f"Методика: {data.get('method_validity', '—')}\n"
+        f"Предпосылки: {data.get('assumptions_quality', '—')}\n"
+        f"Реалистичность результата: {data.get('result_reliability', '—')}\n"
+        f"Тип результата: {data.get('result_type', '—')}\n"
+        f"Эффект: {data.get('project_effect', '—')}"
     )
     try:
         await bot.send_message(ADMIN_ID, report)
-        await message.answer("Данные отправлены оператору ✅", reply_markup=types.ReplyKeyboardRemove())
+        await message.answer(
+            "Данные отправлены оператору ✅",
+            reply_markup=types.ReplyKeyboardMarkup(resize_keyboard=True).add("Перейти к оценке другой команды")
+        )
     except Exception as e:
         await message.answer(f"Не удалось отправить админу: {e}")
+
+
+# Начать оценку новой команды
+@dp.message_handler(lambda msg: msg.text == "Перейти к оценке другой команды")
+async def new_team(message: types.Message):
+    user_data[message.from_user.id] = {}  # сбрасываем старые данные
+    await message.answer("Введи название новой команды, которую хочешь оценить.", reply_markup=types.ReplyKeyboardRemove())
 
 
 # Тестовая команда
