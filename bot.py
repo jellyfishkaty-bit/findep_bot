@@ -41,9 +41,9 @@ project_effect_kb = ReplyKeyboardMarkup(resize_keyboard=True).add(
 send_kb = ReplyKeyboardMarkup(resize_keyboard=True).add("Отправить данные оператору")
 
 
-# Первый контакт — показываем кнопку «Старт»
-@dp.message_handler(lambda msg: msg.from_user.id not in user_data and msg.text != "Старт")
-async def greet_user(message: types.Message):
+# Универсальный старт: реагируем на любое сообщение, если нет активной оценки
+@dp.message_handler(lambda msg: "team_name" not in user_data.get(msg.from_user.id, {}))
+async def always_offer_start(message: types.Message):
     user_data[message.from_user.id] = {}
     await message.answer(
         "Привет 👋 Нажми кнопку «Старт», чтобы начать оценку.",
@@ -75,19 +75,21 @@ async def own_team(message: types.Message):
     await message.answer("Присутствует новая информация?", reply_markup=yes_no_kb)
 
 
-# Новая информация
+# Новая информация (фикс для «Нет»)
 @dp.message_handler(lambda msg: "is_new_info" not in user_data.get(msg.from_user.id, {}))
 async def new_info(message: types.Message):
     if message.text not in ["Да", "Нет"]:
         return
     user_data[message.from_user.id]["is_new_info"] = message.text
+
     if message.text == "Нет":
         await message.answer("Спасибо 🙏", reply_markup=send_kb)
-    else:
-        await message.answer(
-            "Оцените достоверность и аргументированность информации",
-            reply_markup=info_quality_kb,
-        )
+        return
+
+    await message.answer(
+        "Оцените достоверность и аргументированность информации",
+        reply_markup=info_quality_kb,
+    )
 
 
 # Аргументированность
@@ -177,7 +179,8 @@ async def send_to_admin(message: types.Message):
 @dp.message_handler(lambda msg: msg.text == "Перейти к оценке другой команды")
 async def new_team(message: types.Message):
     user_data[message.from_user.id] = {}  # сбрасываем старые данные
-    await message.answer("Введи название новой команды, которую хочешь оценить.", reply_markup=types.ReplyKeyboardRemove())
+    await message.answer("Введи название новой команды, которую хочешь оценить.",
+                         reply_markup=types.ReplyKeyboardRemove())
 
 
 # Тестовая команда
