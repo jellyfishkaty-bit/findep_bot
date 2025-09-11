@@ -80,7 +80,7 @@ async def send_report_to_admin(data: dict):
 # === Хэндлеры ===
 
 # Приветствие
-@dp.message_handler(commands=["start", "cancel"], state="*")
+@dp.message_handler(commands=["start"], state="*")
 async def start_cmd(message: types.Message, state: FSMContext):
     await state.finish()
     await message.answer("Привет 👋 Нажми «Старт», чтобы начать оценку.", reply_markup=start_kb)
@@ -91,8 +91,7 @@ async def start_cmd(message: types.Message, state: FSMContext):
 async def start_flow(message: types.Message, state: FSMContext):
     await state.finish()
     await EvalFlow.TeamName.set()
-    await message.answer("Введи название команды, которую хочешь оценить.",
-                         reply_markup=ReplyKeyboardRemove())
+    await message.answer("Введи название команды, которую хочешь оценить.", reply_markup=ReplyKeyboardRemove())
 
 
 # Название команды
@@ -198,7 +197,7 @@ async def s_finish(message: types.Message, state: FSMContext):
     await message.answer("Спасибо, работа завершена 🙌", reply_markup=ReplyKeyboardRemove())
 
 
-# /ping для проверки
+# Проверка связи
 @dp.message_handler(commands=["ping"], state="*")
 async def ping(message: types.Message):
     await bot.send_message(ADMIN_ID, "Тест: бот может писать админу ✅")
