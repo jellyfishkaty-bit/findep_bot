@@ -41,8 +41,8 @@ project_effect_kb = ReplyKeyboardMarkup(resize_keyboard=True).add(
 send_kb = ReplyKeyboardMarkup(resize_keyboard=True).add("Отправить данные оператору")
 
 
-# Первый контакт — всегда показываем кнопку «Старт»
-@dp.message_handler(lambda msg: msg.from_user.id not in user_data)
+# Первый контакт — показываем кнопку «Старт»
+@dp.message_handler(lambda msg: msg.from_user.id not in user_data and msg.text != "Старт")
 async def greet_user(message: types.Message):
     user_data[message.from_user.id] = {}
     await message.answer(
@@ -55,7 +55,8 @@ async def greet_user(message: types.Message):
 @dp.message_handler(lambda msg: msg.text == "Старт")
 async def pressed_start(message: types.Message):
     user_data[message.from_user.id] = {}
-    await message.answer("Введи название команды, которую хочешь оценить.", reply_markup=types.ReplyKeyboardRemove())
+    await message.answer("Введи название команды, которую хочешь оценить.",
+                         reply_markup=types.ReplyKeyboardRemove())
 
 
 # Название команды
