@@ -17,6 +17,7 @@ dp = Dispatcher(bot, storage=storage)
 
 # Состояния
 class EvalForm(StatesGroup):
+    category = State()
     team_name = State()
     is_own_team = State()
     is_new_info = State()
@@ -50,15 +51,61 @@ project_effect_kb = ReplyKeyboardMarkup(resize_keyboard=True).add(
 send_kb = ReplyKeyboardMarkup(resize_keyboard=True).add("Отправить данные оператору")
 restart_kb = ReplyKeyboardMarkup(resize_keyboard=True).add("Перейти к оценке другой команды")
 
+# Категории
+category_kb = ReplyKeyboardMarkup(resize_keyboard=True).add("Продажи", "Процессы")
+
+# Списки команд
+sales_teams = [
+    "Крабстеры", "Криптон", "Улётный счет", "Спортивные Магнаты",
+    "Wealth & Health", "VIP спецназ", "Привлекатор", "Стирая границы",
+    "Фактор роста", "Зай, выдавай!", "BestSalers", "ИПОТЕЧНЫЙ ШАНТАРАМ",
+    "оооо 'Какие Люди!'", "Все включено", "Космо Продакшн", "Всё ЗАЩИТАно!",
+    "Миллиарды. Без границ", "Агрессивный БизДев", "Новый уровень", '"БЕЗ ПОТЕРЬ"'
+]
+
+process_teams = [
+    "Милый, КОД довинчен", "R.A.I. center", "Великий комбинатор", "Бесстрашные Pro СКУДы",
+    "Скрат", "Ракета", "Data Stars", "Кубик РубИИка", "Эволюция", "На связИИ",
+    "Команда Э. Набиуллиной", "THE FILTER", "Адаптивный горизонт", "Знахарь KIDS",
+    "СовкомПассивити", "Нейроактивные + Туса без Джигана", "Кремниевая Галина",
+    "Интроверты", "iМолодца!", "#ЛюдиВажнее"
+]
+
+def build_team_keyboard(category: str):
+    kb = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
+    if category == "Продажи":
+        for t in sales_teams:
+            kb.add(t)
+    else:
+        for t in process_teams:
+            kb.add(t)
+    return kb
+
 # Старт
 @dp.message_handler(commands=["start"])
 async def start(message: types.Message):
+    await EvalForm.category.set()
+    await message.answer("Привет 👋\nВыбери категорию команды:", reply_markup=category_kb)
+
+# Категория
+@dp.message_handler(state=EvalForm.category)
+async def choose_category(message: types.Message, state: FSMContext):
+    if message.text not in ["Продажи", "Процессы"]:
+        return
+    await state.update_data(category=message.text)
     await EvalForm.team_name.set()
-    await message.answer("Привет 👋\nВведи название команды, которую хочешь оценить.")
+    await message.answer("Выбери команду:", reply_markup=build_team_keyboard(message.text))
 
 # Название команды
 @dp.message_handler(state=EvalForm.team_name)
 async def get_team_name(message: types.Message, state: FSMContext):
+    data = await state.get_data()
+    category = data.get("category")
+    if category == "Продажи" and message.text not in sales_teams:
+        return
+    if category == "Процессы" and message.text not in process_teams:
+        return
+
     await state.update_data(team_name=message.text)
     await EvalForm.is_own_team.set()
     await message.answer("Капитан говорит о своей команде?", reply_markup=yes_no_kb)
@@ -80,7 +127,7 @@ async def new_info(message: types.Message, state: FSMContext):
     await state.update_data(is_new_info=message.text)
     if message.text == "Нет":
         await message.answer("Спасибо 🙏", reply_markup=send_kb)
-        await state.set_state("finish")  # специальное состояние ожидания отправки
+        await state.set_state("finish")  # ждём отправку
     else:
         await EvalForm.info_quality.set()
         await message.answer("Оцените достоверность и аргументированность информации",
@@ -150,6 +197,7 @@ async def project_effect(message: types.Message, state: FSMContext):
 async def send_to_admin(message: types.Message, state: FSMContext):
     data = await state.get_data()
     report = (
+        f"Категория: {data.get('category')}\n"
         f"Команда: {data.get('team_name')}\n"
         f"О своей команде: {data.get('is_own_team')}\n"
         f"Новая информация: {data.get('is_new_info')}\n"
@@ -167,8 +215,8 @@ async def send_to_admin(message: types.Message, state: FSMContext):
 # Начать заново
 @dp.message_handler(lambda msg: msg.text == "Перейти к оценке другой команды")
 async def restart(message: types.Message):
-    await EvalForm.team_name.set()
-    await message.answer("Введи название команды, которую хочешь оценить.")
+    await EvalForm.category.set()
+    await message.answer("Выбери категорию команды:", reply_markup=category_kb)
 
 if __name__ == "__main__":
     executor.start_polling(dp, skip_updates=True)
