@@ -1,54 +1,59 @@
 import os
 import logging
 from aiogram import Bot, Dispatcher, executor, types
-from aiogram.types import ReplyKeyboardMarkup
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
 from aiogram.dispatcher import FSMContext
 from aiogram.dispatcher.filters.state import State, StatesGroup
+from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
 
+# --- ENV ---
 API_TOKEN = os.getenv("API_TOKEN")
 ADMIN_ID = int(os.getenv("ADMIN_ID"))
 
+# --- Логирование ---
 logging.basicConfig(level=logging.INFO)
 
+# --- Бот ---
 bot = Bot(token=API_TOKEN)
 storage = MemoryStorage()
 dp = Dispatcher(bot, storage=storage)
 
-# ==============================
-# Списки категорий и команд
-# ==============================
-categories = ["Продажи", "Процессы"]
+# --- Состояния ---
+class EvalForm(StatesGroup):
+    category = State()
+    team_name = State()
+    is_own_team = State()
+    is_new_info = State()
+    info_quality = State()
+    method_validity = State()
+    assumptions_quality = State()
+    result_reliability = State()
+    result_type = State()
+    project_effect = State()
+
+# --- Клавиатуры ---
+category_kb = ReplyKeyboardMarkup(resize_keyboard=True).add("Продажи", "Процессы")
 
 sales_teams = [
-    "Крабстеры", "Криптон", "Улётный счет", "Спортивные Магнаты",
-    "Wealth & Health", "VIP спецназ", "Привлекатор", "Стирая границы",
-    "Фактор роста", "Зай, выдавай!", "BestSalers", "ИПОТЕЧНЫЙ ШАНТАРАМ",
-    "оооо \"Какие Люди!\"", "Все включено", "Космо Продакшн", "Всё ЗАЩИТАно!",
-    "Миллиарды. Без границ", "Агрессивный БизДев", "Новый уровень", "\"БЕЗ ПОТЕРЬ\""
+    "Крабстеры", "Криптон", "Улётный счет", "Спортивные Магнаты", "Wealth & Health",
+    "VIP спецназ", "Привлекатор", "Стирая границы", "Фактор роста", "Зай, выдавай!",
+    "BestSalers", "ИПОТЕЧНЫЙ ШАНТАРАМ", "оооо \"Какие Люди!\"", "Все включено",
+    "Космо Продакшн", "Всё ЗАЩИТАно!", "Миллиарды. Без границ", "Агрессивный БизДев",
+    "Новый уровень", "\"БЕЗ ПОТЕРЬ\""
 ]
 
 process_teams = [
     "Милый, КОД довинчен", "R.A.I. center", "Великий комбинатор", "Бесстрашные Pro СКУДы",
     "Скрат", "Ракета", "Data Stars", "Кубик РубИИка", "Эволюция", "На связИИ",
     "Команда Э. Набиуллиной", "THE FILTER", "Адаптивный горизонт", "Знахарь KIDS",
-    "СовкомПассивити", "Нейроактивные + Туса без Джигана", "Кремниевая Галина", "Интроверты",
-    "iМолодца!", "#ЛюдиВажнее"
+    "СовкомПассивити", "Нейроактивные + Туса без Джигана", "Кремниевая Галина",
+    "Интроверты", "iМолодца!", "#ЛюдиВажнее"
 ]
 
-# ==============================
-# Клавиатуры
-# ==============================
-category_kb = ReplyKeyboardMarkup(resize_keyboard=True).add(*categories)
-
-def make_team_kb(category: str):
+def build_keyboard(options):
     kb = ReplyKeyboardMarkup(resize_keyboard=True)
-    if category == "Продажи":
-        for team in sales_teams:
-            kb.add(team)
-    elif category == "Процессы":
-        for team in process_teams:
-            kb.add(team)
+    for item in options:
+        kb.add(item)
     return kb
 
 yes_no_kb = ReplyKeyboardMarkup(resize_keyboard=True).add("Да", "Нет")
@@ -71,131 +76,127 @@ project_effect_kb = ReplyKeyboardMarkup(resize_keyboard=True).add(
     "Разовый", "Постоянный"
 )
 send_kb = ReplyKeyboardMarkup(resize_keyboard=True).add("Отправить данные оператору")
-restart_kb = ReplyKeyboardMarkup(resize_keyboard=True).add("Оценить другую команду")
 
-# ==============================
-# FSM States
-# ==============================
-class EvalForm(StatesGroup):
-    category = State()
-    team_name = State()
-    is_own_team = State()
-    is_new_info = State()
-    info_quality = State()
-    method_validity = State()
-    assumptions_quality = State()
-    result_reliability = State()
-    result_type = State()
-    project_effect = State()
 
-# ==============================
-# Handlers
-# ==============================
-@dp.message_handler(commands=["start"], state="*")
+# --- Старт ---
+@dp.message_handler(commands=["start"])
 async def start(message: types.Message, state: FSMContext):
-    await state.finish()  # сброс на всякий случай
     await EvalForm.category.set()
-    await message.answer("Выбери категорию:", reply_markup=category_kb)
+    await message.answer("Привет 👋\nВыбери категорию:", reply_markup=category_kb)
 
+
+# --- Категория ---
 @dp.message_handler(state=EvalForm.category)
-async def get_category(message: types.Message, state: FSMContext):
-    if message.text not in categories:
-        await message.answer("Выберите категорию из кнопок 👆")
+async def choose_category(message: types.Message, state: FSMContext):
+    if message.text not in ["Продажи", "Процессы"]:
+        await message.answer("Пожалуйста, выбери категорию с кнопки 👇", reply_markup=category_kb)
         return
     await state.update_data(category=message.text)
-    await EvalForm.team_name.set()
-    await message.answer("Теперь выбери команду:", reply_markup=make_team_kb(message.text))
+    if message.text == "Продажи":
+        await EvalForm.team_name.set()
+        await message.answer("Выбери команду из категории Продажи:", reply_markup=build_keyboard(sales_teams))
+    else:
+        await EvalForm.team_name.set()
+        await message.answer("Выбери команду из категории Процессы:", reply_markup=build_keyboard(process_teams))
 
+
+# --- Команда ---
 @dp.message_handler(state=EvalForm.team_name)
 async def get_team(message: types.Message, state: FSMContext):
     data = await state.get_data()
     if data["category"] == "Продажи" and message.text not in sales_teams:
-        await message.answer("Выберите команду из списка 👆")
+        await message.answer("Выбери команду из списка 👇", reply_markup=build_keyboard(sales_teams))
         return
     if data["category"] == "Процессы" and message.text not in process_teams:
-        await message.answer("Выберите команду из списка 👆")
+        await message.answer("Выбери команду из списка 👇", reply_markup=build_keyboard(process_teams))
         return
+
     await state.update_data(team_name=message.text)
     await EvalForm.is_own_team.set()
     await message.answer("Капитан говорит о своей команде?", reply_markup=yes_no_kb)
 
+
+# --- Остальные вопросы ---
 @dp.message_handler(state=EvalForm.is_own_team)
 async def own_team(message: types.Message, state: FSMContext):
     if message.text not in ["Да", "Нет"]:
-        await message.answer("Нажми кнопку 👆")
         return
     await state.update_data(is_own_team=message.text)
     await EvalForm.is_new_info.set()
     await message.answer("Присутствует новая информация?", reply_markup=yes_no_kb)
 
+
 @dp.message_handler(state=EvalForm.is_new_info)
 async def new_info(message: types.Message, state: FSMContext):
     if message.text not in ["Да", "Нет"]:
-        await message.answer("Нажми кнопку 👆")
         return
     await state.update_data(is_new_info=message.text)
     if message.text == "Нет":
         await message.answer("Спасибо 🙏", reply_markup=send_kb)
     else:
         await EvalForm.info_quality.set()
-        await message.answer("Оцените достоверность и аргументированность информации", reply_markup=info_quality_kb)
+        await message.answer("Оцените достоверность и аргументированность информации",
+                             reply_markup=info_quality_kb)
+
 
 @dp.message_handler(state=EvalForm.info_quality)
 async def info_quality(message: types.Message, state: FSMContext):
     if message.text not in ["Хорошая", "Средняя", "Слабая", "Не можем оценить"]:
-        await message.answer("Нажми кнопку 👆")
         return
     await state.update_data(info_quality=message.text)
     await EvalForm.method_validity.set()
-    await message.answer("Является ли методика расчёта результата корректной?", reply_markup=method_validity_kb)
+    await message.answer("Является ли методика расчёта результата корректной?",
+                         reply_markup=method_validity_kb)
+
 
 @dp.message_handler(state=EvalForm.method_validity)
 async def method_validity(message: types.Message, state: FSMContext):
     if message.text not in ["Некорректно", "Есть ошибки", "Корректная"]:
-        await message.answer("Нажми кнопку 👆")
         return
     await state.update_data(method_validity=message.text)
     await EvalForm.assumptions_quality.set()
-    await message.answer("Оцените обоснованность предпосылок расчёта", reply_markup=assumptions_kb)
+    await message.answer("Оцените обоснованность предпосылок расчёта",
+                         reply_markup=assumptions_kb)
+
 
 @dp.message_handler(state=EvalForm.assumptions_quality)
 async def assumptions_quality(message: types.Message, state: FSMContext):
     if message.text not in ["Оптимистичны", "Реалистичны", "Нереалистичны", "Невозможно оценить"]:
-        await message.answer("Нажми кнопку 👆")
         return
     await state.update_data(assumptions_quality=message.text)
     await EvalForm.result_reliability.set()
-    await message.answer("Верите ли в реалистичность расчёта результата?", reply_markup=result_reliability_kb)
+    await message.answer("Верите ли в реалистичность расчёта результата?",
+                         reply_markup=result_reliability_kb)
+
 
 @dp.message_handler(state=EvalForm.result_reliability)
 async def result_reliability(message: types.Message, state: FSMContext):
     if message.text not in ["Верим", "Не верим", "Сомневаемся", "Не можем оценить"]:
-        await message.answer("Нажми кнопку 👆")
         return
     await state.update_data(result_reliability=message.text)
     await EvalForm.result_type.set()
-    await message.answer("Оцените тип оценки экономического результата", reply_markup=result_type_kb)
+    await message.answer("Оцените тип оценки экономического результата",
+                         reply_markup=result_type_kb)
+
 
 @dp.message_handler(state=EvalForm.result_type)
 async def result_type(message: types.Message, state: FSMContext):
     if message.text not in ["Реализован", "Спрогнозирован"]:
-        await message.answer("Нажми кнопку 👆")
         return
     await state.update_data(result_type=message.text)
     await EvalForm.project_effect.set()
     await message.answer("Какой эффект от проекта?", reply_markup=project_effect_kb)
 
+
 @dp.message_handler(state=EvalForm.project_effect)
 async def project_effect(message: types.Message, state: FSMContext):
     if message.text not in ["Разовый", "Постоянный"]:
-        await message.answer("Нажми кнопку 👆")
         return
     await state.update_data(project_effect=message.text)
     await message.answer("Спасибо 🙏", reply_markup=send_kb)
 
-# ==============================
-# Отправка оператору
-# ==============================
+
+# --- Отправка данных ---
 @dp.message_handler(lambda msg: msg.text == "Отправить данные оператору", state="*")
 async def send_to_admin(message: types.Message, state: FSMContext):
     data = await state.get_data()
@@ -212,20 +213,22 @@ async def send_to_admin(message: types.Message, state: FSMContext):
         f"Эффект: {data.get('project_effect')}"
     )
     await bot.send_message(ADMIN_ID, report)
+
+    # сбрасываем состояние
+    await state.finish()
+
+    # кнопка на новую оценку
+    restart_kb = ReplyKeyboardMarkup(resize_keyboard=True).add("Оценить другую команду")
     await message.answer("Данные отправлены оператору ✅", reply_markup=restart_kb)
-    await state.finish()
 
-# ==============================
-# Перезапуск оценки
-# ==============================
-@dp.message_handler(lambda msg: msg.text == "Оценить другую команду", state="*")
-async def restart(message: types.Message, state: FSMContext):
-    await state.finish()
+
+# --- Рестарт цикла ---
+@dp.message_handler(lambda msg: msg.text == "Оценить другую команду")
+async def restart(message: types.Message):
     await EvalForm.category.set()
-    await message.answer("Выбери категорию:", reply_markup=category_kb)
+    await message.answer("Выберите категорию:", reply_markup=category_kb)
 
-# ==============================
-# Запуск
-# ==============================
+
+# --- Запуск ---
 if __name__ == "__main__":
     executor.start_polling(dp, skip_updates=True)
