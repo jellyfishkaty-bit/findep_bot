@@ -1,7 +1,7 @@
 import os
 import logging
 from aiogram import Bot, Dispatcher, executor, types
-from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton
 
 API_TOKEN = os.getenv("API_TOKEN")
 ADMIN_ID = int(os.getenv("ADMIN_ID"))
@@ -11,17 +11,17 @@ logging.basicConfig(level=logging.INFO)
 bot = Bot(token=API_TOKEN)
 dp = Dispatcher(bot)
 
-# Данные пользователей
+# данные пользователей
 user_data = {}
 
-# Категории и команды
+# категории и команды
 categories = {
     "Продажи": [
-        "Крабстеры", "Криптон", "Улётный счет", "Спортивные Магнаты", "Wealth & Health",
-        "VIP спецназ", "Привлекатор", "Стирая границы", "Фактор роста", "Зай, выдавай!",
-        "BestSalers", "ИПОТЕЧНЫЙ ШАНТАРАМ", "оооо \"Какие Люди!\"", "Все включено",
-        "Космо Продакшн", "Всё ЗАЩИТАно!", "Миллиарды. Без границ",
-        "Агрессивный БизДев", "Новый уровень", "\"БЕЗ ПОТЕРЬ\""
+        "Крабстеры", "Криптон", "Улётный счет", "Спортивные Магнаты",
+        "Wealth & Health", "VIP спецназ", "Привлекатор", "Стирая границы",
+        "Фактор роста", "Зай, выдавай!", "BestSalers", "ИПОТЕЧНЫЙ ШАНТАРАМ",
+        "оооо \"Какие Люди!\"", "Все включено", "Космо Продакшн", "Всё ЗАЩИТАно!",
+        "Миллиарды. Без границ", "Агрессивный БизДев", "Новый уровень", "\"БЕЗ ПОТЕРЬ\""
     ],
     "Процессы": [
         "Милый, КОД довинчен", "R.A.I. center", "Великий комбинатор", "Бесстрашные Pro СКУДы",
@@ -32,8 +32,7 @@ categories = {
     ]
 }
 
-# Клавиатуры
-category_kb = ReplyKeyboardMarkup(resize_keyboard=True).add("Продажи", "Процессы")
+# клавиатуры для вопросов
 yes_no_kb = ReplyKeyboardMarkup(resize_keyboard=True).add("Да", "Нет")
 info_quality_kb = ReplyKeyboardMarkup(resize_keyboard=True).add(
     "Хорошая", "Средняя", "Слабая", "Не можем оценить"
@@ -54,34 +53,42 @@ project_effect_kb = ReplyKeyboardMarkup(resize_keyboard=True).add(
     "Разовый", "Постоянный"
 )
 send_kb = ReplyKeyboardMarkup(resize_keyboard=True).add("Отправить данные оператору")
-restart_kb = ReplyKeyboardMarkup(resize_keyboard=True).add("Оценить другую команду")
 
 
-# Старт
+# старт
 @dp.message_handler(commands=["start"])
 async def start(message: types.Message):
     user_data[message.from_user.id] = {}
-    await message.answer("Привет 👋\nВыберите категорию:", reply_markup=category_kb)
+    kb = InlineKeyboardMarkup()
+    for cat in categories.keys():
+        kb.add(InlineKeyboardButton(cat, callback_data=f"cat:{cat}"))
+    await message.answer("Выберите категорию:", reply_markup=kb)
 
 
-# Категория
-@dp.message_handler(lambda msg: msg.text in categories.keys())
-async def choose_category(message: types.Message):
-    user_data[message.from_user.id] = {"category": message.text}
-    teams_kb = ReplyKeyboardMarkup(resize_keyboard=True)
-    for team in categories[message.text]:
-        teams_kb.add(KeyboardButton(team))
-    await message.answer("Выберите команду:", reply_markup=teams_kb)
+# выбор категории
+@dp.callback_query_handler(lambda c: c.data.startswith("cat:"))
+async def choose_category(callback: types.CallbackQuery):
+    cat = callback.data.split(":", 1)[1]
+    user_data[callback.from_user.id] = {"category": cat}
+
+    kb = InlineKeyboardMarkup()
+    for team in categories[cat]:
+        kb.add(InlineKeyboardButton(team, callback_data=f"team:{team}"))
+
+    await callback.message.answer("Выберите команду:", reply_markup=kb)
+    await callback.answer()
 
 
-# Команда
-@dp.message_handler(lambda msg: any(msg.text in teams for teams in categories.values()))
-async def choose_team(message: types.Message):
-    user_data[message.from_user.id]["team_name"] = message.text
-    await message.answer("Капитан говорит о своей команде?", reply_markup=yes_no_kb)
+# выбор команды
+@dp.callback_query_handler(lambda c: c.data.startswith("team:"))
+async def choose_team(callback: types.CallbackQuery):
+    team = callback.data.split(":", 1)[1]
+    user_data[callback.from_user.id]["team_name"] = team
+    await callback.message.answer("Капитан говорит о своей команде?", reply_markup=yes_no_kb)
+    await callback.answer()
 
 
-# Вопрос 1
+# дальше обычные вопросы
 @dp.message_handler(lambda msg: "is_own_team" not in user_data.get(msg.from_user.id, {}))
 async def own_team(message: types.Message):
     if message.text not in ["Да", "Нет"]:
@@ -90,7 +97,6 @@ async def own_team(message: types.Message):
     await message.answer("Присутствует новая информация?", reply_markup=yes_no_kb)
 
 
-# Вопрос 2
 @dp.message_handler(lambda msg: "is_new_info" not in user_data.get(msg.from_user.id, {}))
 async def new_info(message: types.Message):
     if message.text not in ["Да", "Нет"]:
@@ -103,7 +109,6 @@ async def new_info(message: types.Message):
                              reply_markup=info_quality_kb)
 
 
-# Вопрос 3
 @dp.message_handler(lambda msg: "info_quality" not in user_data.get(msg.from_user.id, {}))
 async def info_quality(message: types.Message):
     if message.text not in ["Хорошая", "Средняя", "Слабая", "Не можем оценить"]:
@@ -113,7 +118,6 @@ async def info_quality(message: types.Message):
                          reply_markup=method_validity_kb)
 
 
-# Вопрос 4
 @dp.message_handler(lambda msg: "method_validity" not in user_data.get(msg.from_user.id, {}))
 async def method_validity(message: types.Message):
     if message.text not in ["Некорректно", "Есть ошибки", "Корректная"]:
@@ -123,7 +127,6 @@ async def method_validity(message: types.Message):
                          reply_markup=assumptions_kb)
 
 
-# Вопрос 5
 @dp.message_handler(lambda msg: "assumptions_quality" not in user_data.get(msg.from_user.id, {}))
 async def assumptions_quality(message: types.Message):
     if message.text not in ["Оптимистичны", "Реалистичны", "Нереалистичны", "Невозможно оценить"]:
@@ -133,7 +136,6 @@ async def assumptions_quality(message: types.Message):
                          reply_markup=result_reliability_kb)
 
 
-# Вопрос 6
 @dp.message_handler(lambda msg: "result_reliability" not in user_data.get(msg.from_user.id, {}))
 async def result_reliability(message: types.Message):
     if message.text not in ["Верим", "Не верим", "Сомневаемся", "Не можем оценить"]:
@@ -143,7 +145,6 @@ async def result_reliability(message: types.Message):
                          reply_markup=result_type_kb)
 
 
-# Вопрос 7
 @dp.message_handler(lambda msg: "result_type" not in user_data.get(msg.from_user.id, {}))
 async def result_type(message: types.Message):
     if message.text not in ["Реализован", "Спрогнозирован"]:
@@ -153,7 +154,6 @@ async def result_type(message: types.Message):
                          reply_markup=project_effect_kb)
 
 
-# Вопрос 8
 @dp.message_handler(lambda msg: "project_effect" not in user_data.get(msg.from_user.id, {}))
 async def project_effect(message: types.Message):
     if message.text not in ["Разовый", "Постоянный"]:
@@ -162,7 +162,7 @@ async def project_effect(message: types.Message):
     await message.answer("Спасибо 🙏", reply_markup=send_kb)
 
 
-# Отправка оператору
+# отправка данных оператору
 @dp.message_handler(lambda msg: msg.text == "Отправить данные оператору")
 async def send_to_admin(message: types.Message):
     data = user_data.get(message.from_user.id, {})
@@ -179,17 +179,21 @@ async def send_to_admin(message: types.Message):
         f"Эффект: {data.get('project_effect')}"
     )
     await bot.send_message(ADMIN_ID, report)
-    await message.answer("Данные отправлены оператору ✅", reply_markup=restart_kb)
 
-    # Чистим данные, чтобы новый цикл был чистым
+    # очищаем данные
     user_data.pop(message.from_user.id, None)
 
+    restart_kb = ReplyKeyboardMarkup(resize_keyboard=True).add("Оценить другую команду")
+    await message.answer("Данные отправлены оператору ✅", reply_markup=restart_kb)
 
-# Перезапуск
+
+# перезапуск цикла
 @dp.message_handler(lambda msg: msg.text == "Оценить другую команду")
 async def restart(message: types.Message):
-    user_data[message.from_user.id] = {}
-    await message.answer("Выберите категорию:", reply_markup=category_kb)
+    kb = InlineKeyboardMarkup()
+    for cat in categories.keys():
+        kb.add(InlineKeyboardButton(cat, callback_data=f"cat:{cat}"))
+    await message.answer("Выберите категорию:", reply_markup=kb)
 
 
 if __name__ == "__main__":
